@@ -1,7 +1,6 @@
-diff -up ./hv_vss_daemon.c.include ./hv_vss_daemon.c
---- ./hv_vss_daemon.c.include	2013-06-26 10:36:36.444910963 +0200
-+++ ./hv_vss_daemon.c	2013-06-26 10:37:22.115951240 +0200
-@@ -34,7 +34,7 @@
+--- hypervvssd/hv_vss_daemon.c	2015-01-05 10:39:19.000000000 +0100
++++ hypervvssd/hv_vss_daemon.c.new	2015-01-09 15:25:54.748374064 +0100
+@@ -33,7 +33,7 @@
  #include <arpa/inet.h>
  #include <linux/fs.h>
  #include <linux/connector.h>
@@ -9,4 +8,4 @@ diff -up ./hv_vss_daemon.c.include ./hv_vss_daemon.c
 +#include "linux/hyperv.h"
  #include <linux/netlink.h>
  #include <syslog.h>
- 
+ #include <getopt.h>

@@ -26,7 +26,6 @@
 #include <sys/socket.h>
 #include <sys/poll.h>
 #include <sys/utsname.h>
-#include <linux/types.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -44,6 +43,7 @@
 #include <fcntl.h>
 #include <dirent.h>
 #include <net/if.h>
+#include <getopt.h>
 
 /*
  * KVP protocol: The user mode component first registers with the
@@ -89,6 +89,7 @@ static char *processor_arch;
 static char *os_build;
 static char *os_version;
 static char *lic_version = "Unknown version";
+static char full_domain_name[HV_KVP_EXCHANGE_MAX_VALUE_SIZE];
 static struct utsname uts_buf;
 
 /*
@@ -1367,7 +1368,7 @@ setval_error:
 }
 
 
-static int
+static void
 kvp_get_domain_name(char *buffer, int length)
 {
 	struct addrinfo	hints, *info ;
@@ -1381,12 +1382,12 @@ kvp_get_domain_name(char *buffer, int length)
 
 	error = getaddrinfo(buffer, NULL, &hints, &info);
 	if (error != 0) {
-		strcpy(buffer, "getaddrinfo failed\n");
-		return error;
+		snprintf(buffer, length, "getaddrinfo failed: 0x%x %s",
+			error, gai_strerror(error));
+		return;
 	}
-	strcpy(buffer, info->ai_canonname);
+	snprintf(buffer, length, "%s", info->ai_canonname);
 	freeaddrinfo(info);
-	return error;
 }
 
 static int
@@ -1417,7 +1418,15 @@ netlink_send(int fd, struct cn_msg *msg)
 	return sendmsg(fd, &message, 0);
 }
 
-int main(void)
+void print_usage(char *argv[])
+{
+	fprintf(stderr, "Usage: %s [options]\n"
+		"Options are:\n"
+		"  -n, --no-daemon        stay in foreground, don't daemonize\n"
+		"  -h, --help             print this help\n", argv[0]);
+}
+
+int main(int argc, char *argv[])
 {
 	int fd, len, nl_group;
 	int error;
@@ -1433,26 +1442,50 @@ int main(void)
 	int	pool;
 	char	*if_name;
 	struct hv_kvp_ipaddr_value *kvp_ip_val;
-	char *kvp_send_buffer;
 	char *kvp_recv_buffer;
 	size_t kvp_recv_buffer_len;
+	int daemonize = 1, long_index = 0, opt;
 
-	if (daemon(1, 0))
+	static struct option long_options[] = {
+		{"help",	no_argument,	   0,  'h' },
+		{"no-daemon",	no_argument,	   0,  'n' },
+		{0,		0,		   0,  0   }
+	};
+
+	while ((opt = getopt_long(argc, argv, "hn", long_options,
+				  &long_index)) != -1) {
+		switch (opt) {
+		case 'n':
+			daemonize = 0;
+			break;
+		case 'h':
+		default:
+			print_usage(argv);
+			exit(EXIT_FAILURE);
+		}
+	}
+
+	if (daemonize && daemon(1, 0))
 		return 1;
+
 	openlog("KVP", 0, LOG_USER);
 	syslog(LOG_INFO, "KVP starting; pid is:%d", getpid());
 
-	kvp_recv_buffer_len = NLMSG_HDRLEN + sizeof(struct cn_msg) + sizeof(struct hv_kvp_msg);
-	kvp_send_buffer = calloc(1, kvp_recv_buffer_len);
+	kvp_recv_buffer_len = NLMSG_LENGTH(0) + sizeof(struct cn_msg) + sizeof(struct hv_kvp_msg);
 	kvp_recv_buffer = calloc(1, kvp_recv_buffer_len);
-	if (!(kvp_send_buffer && kvp_recv_buffer)) {
-		syslog(LOG_ERR, "Failed to allocate netlink buffers");
+	if (!kvp_recv_buffer) {
+		syslog(LOG_ERR, "Failed to allocate netlink buffer");
 		exit(EXIT_FAILURE);
 	}
 	/*
 	 * Retrieve OS release information.
 	 */
 	kvp_get_os_info();
+	/*
+	 * Cache Fully Qualified Domain Name because getaddrinfo takes an
+	 * unpredictable amount of time to finish.
+	 */
+	kvp_get_domain_name(full_domain_name, sizeof(full_domain_name));
 
 	if (kvp_file_init()) {
 		syslog(LOG_ERR, "Failed to initialize the pools");
@@ -1488,7 +1521,7 @@ int main(void)
 	/*
 	 * Register ourselves with the kernel.
 	 */
-	message = (struct cn_msg *)kvp_send_buffer;
+	message = (struct cn_msg *)kvp_recv_buffer;
 	message->id.idx = CN_KVP_IDX;
 	message->id.val = CN_KVP_VAL;
 
@@ -1526,8 +1559,15 @@ int main(void)
 				addr_p, &addr_l);
 
 		if (len < 0) {
+			int saved_errno = errno;
 			syslog(LOG_ERR, "recvfrom failed; pid:%u error:%d %s",
 					addr.nl_pid, errno, strerror(errno));
+
+			if (saved_errno == ENOBUFS) {
+				syslog(LOG_ERR, "receive error: ignored");
+				continue;
+			}
+
 			close(fd);
 			return -1;
 		}
@@ -1671,8 +1711,7 @@ int main(void)
 
 		switch (hv_msg->body.kvp_enum_data.index) {
 		case FullyQualifiedDomainName:
-			kvp_get_domain_name(key_value,
-					HV_KVP_EXCHANGE_MAX_VALUE_SIZE);
+			strcpy(key_value, full_domain_name);
 			strcpy(key_name, "FullyQualifiedDomainName");
 			break;
 		case IntegrationServicesVersion:
@@ -1731,8 +1770,15 @@ kvp_done:
 
 		len = netlink_send(fd, incoming_cn_msg);
 		if (len < 0) {
+			int saved_errno = errno;
 			syslog(LOG_ERR, "net_link send failed; error: %d %s", errno,
 					strerror(errno));
+
+			if (saved_errno == ENOMEM || saved_errno == ENOBUFS) {
+				syslog(LOG_ERR, "send error: ignored");
+				continue;
+			}
+
 			exit(EXIT_FAILURE);
 		}
 	}

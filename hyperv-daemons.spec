@@ -5,43 +5,43 @@
 # HyperV FCOPY daemon binary name
 %global hv_fcopy_daemon hypervfcopyd
 # snapshot version
-%global snapver .20130826git
+%global snapver .20150108git
 # use hardened build
 %global _hardened_build 1
 
 Name:     hyperv-daemons
 Version:  0
-Release:  0.15%{?snapver}%{?dist}
+Release:  0.17%{?snapver}%{?dist}
 Summary:  HyperV daemons suite
 
 Group:    System Environment/Daemons
 License:  GPLv2
 URL:      http://www.kernel.org
 
-# Source files obtained from kernel upstream 2013-08-26; hv_fcopy_daemon.c on 2014-07-14.
-# git://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git
+# Source files obtained from kernel upstream 3.19-rc3 (b1940cd21c0f4abdce101253e860feff547291b0)
+# git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
 # The daemon and scripts are located in "master branch - /tools/hv"
-# COPYING -> https://git.kernel.org/cgit/linux/kernel/git/next/linux-next.git/plain/COPYING?id=refs/tags/next-20130822 
+# COPYING -> https://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/tree/COPYING?id=b1940cd21c0f4abdce101253e860feff547291b
 Source0:  COPYING
 
 # HYPERV KVP DAEMON
-# hv_kvp_daemon.c -> https://git.kernel.org/cgit/linux/kernel/git/next/linux-next.git/plain/tools/hv/hv_kvp_daemon.c?id=refs/tags/next-20130822
+# hv_kvp_daemon.c -> https://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/plain/tools/hv/hv_kvp_daemon.c?id=b1940cd21c0f4abdce101253e860feff547291b0
 Source1:  hv_kvp_daemon.c
-# hv_get_dhcp_info.sh -> https://git.kernel.org/cgit/linux/kernel/git/next/linux-next.git/plain/tools/hv/hv_get_dhcp_info.sh?id=refs/tags/next-20130822
+# hv_get_dhcp_info.sh -> https://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/plain/tools/hv/hv_get_dhcp_info.sh?id=b1940cd21c0f4abdce101253e860feff547291b0
 Source2:  hv_get_dhcp_info.sh
-# hv_get_dns_info.sh -> https://git.kernel.org/cgit/linux/kernel/git/next/linux-next.git/plain/tools/hv/hv_get_dns_info.sh?id=refs/tags/next-20130822
+# hv_get_dns_info.sh -> https://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/plain/tools/hv/hv_get_dns_info.sh?id=b1940cd21c0f4abdce101253e860feff547291b0
 Source3:  hv_get_dns_info.sh
-# hv_set_ifconfig.sh -> https://git.kernel.org/cgit/linux/kernel/git/next/linux-next.git/plain/tools/hv/hv_set_ifconfig.sh?id=refs/tags/next-20130822
+# hv_set_ifconfig.sh -> https://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/plain/tools/hv/hv_set_ifconfig.sh?id=b1940cd21c0f4abdce101253e860feff547291b0
 Source4:  hv_set_ifconfig.sh
 Source5:  hypervkvpd
 
 # HYPERV VSS DAEMON
-# hv_vss_daemon.c -> https://git.kernel.org/cgit/linux/kernel/git/next/linux-next.git/plain/tools/hv/hv_vss_daemon.c?id=refs/tags/next-20130822
+# hv_vss_daemon.c -> https://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/plain/tools/hv/hv_vss_daemon.c?id=b1940cd21c0f4abdce101253e860feff547291b0
 Source100:  hv_vss_daemon.c
 Source101:  hypervvssd
 
 # HYPERV FCOPY DAEMON
-# hv_fcopy_daemon.c -> https://git.kernel.org/cgit/linux/kernel/git/next/linux-next.git/plain/tools/hv/hv_fcopy_daemon.c?id=refs/tags/next-20140714
+# hv_fcopy_daemon.c -> https://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/plain/tools/hv/hv_fcopy_daemon.c?id=b1940cd21c0f4abdce101253e860feff547291b0
 Source200:  hv_fcopy_daemon.c
 Source201:  hypervfcopyd
 
@@ -63,8 +63,6 @@ Patch2:   hypervkvpd-0-long_file_names_from_readdir.patch
 # some headers in system include PATH are also in kernel-devel
 # package.
 Patch100:   hypervvssd-0-fix_includes.patch
-# rhbz#1064094 - https://git.kernel.org/cgit/linux/kernel/git/next/linux-next.git/patch/tools/hv?id=f33b215549938f89aebf862b942366d2aa41c191
-Patch101:   hypervvssd-0-ignore-VFAT-mounts.patch
 
 # HYPERV FCOPY DAEMON
 # use quoted include for linux/hyperv.h because we use gcc option
@@ -168,7 +166,6 @@ cp -pvL %{SOURCE201} hypervfcopyd
 %patch2 -p1 -b .long_names
 
 %patch100 -p1 -b .include
-%patch101 -p3 -b .vfat
 
 %patch200 -p1 -b .include
 
@@ -200,7 +197,7 @@ gcc \
 
 # HYPERV FCOPY DAEMON
 gcc \
-    $RPM_OPT_FLAGS \
+    $RPM_OPT_FLAGS -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 \
     -iquote %{_usrsrc}/kernels/%{kversion}/include \
     -c hv_fcopy_daemon.c
 
@@ -304,6 +301,13 @@ rm -rf %{buildroot}
 %doc COPYING
 
 %changelog
+* Wed May 13 2015 Vitaly Kuznetsov <vkuznets@redhat.com> - 0-0.17.20150108git
+- Change CFLAGS to support large (>3GB) files on i686 (#1221097)
+
+* Fri Jan 09 2015 Vitaly Kuznetsov <vkuznets@redhat.com> - 0-0.16.20150108git
+- Rebase to 3.19-rc3 (20150108 git snapshot)
+- Skip all readonly-mounted filesystemd (#1161368)
+
 * Mon Jul 14 2014 Tomas Hozza <thozza@redhat.com> - 0-0.15.20130826git
 - Package new File copy daemon (#1107559)
 
