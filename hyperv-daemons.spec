@@ -5,20 +5,22 @@
 # HyperV FCOPY daemon binary name
 %global hv_fcopy_daemon hypervfcopyd
 # snapshot version
-%global snapver .20150402git
+%global snapver .20160216git
 # use hardened build
 %global _hardened_build 1
+# udev rules prefix
+%global udev_prefix 70
 
 Name:     hyperv-daemons
 Version:  0
-Release:  0.26%{?snapver}%{?dist}
+Release:  0.29%{?snapver}%{?dist}
 Summary:  HyperV daemons suite
 
 Group:    System Environment/Daemons
 License:  GPLv2
 URL:      http://www.kernel.org
 
-# Source files obtained from kernel upstream 2015-04-02.
+# Source files obtained from kernel upstream 2016-02-16.
 # git://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git
 # The daemon and scripts are located in "master branch - /tools/hv"
 # COPYING -> https://git.kernel.org/cgit/linux/kernel/git/next/linux-next.git/plain/COPYING?id=next-20150402
@@ -34,23 +36,27 @@ Source3:  hv_get_dns_info.sh
 # hv_set_ifconfig.sh -> https://git.kernel.org/cgit/linux/kernel/git/next/linux-next.git/plain/tools/hv/hv_set_ifconfig.sh?id=next-20150402
 Source4:  hv_set_ifconfig.sh
 Source5:  hypervkvpd.service
+Source6:  hypervkvp.rules
 
 # HYPERV VSS DAEMON
 # hv_vss_daemon.c -> https://git.kernel.org/cgit/linux/kernel/git/next/linux-next.git/plain/tools/hv/hv_vss_daemon.c?id=next-20150402
 Source100:  hv_vss_daemon.c
 Source101:  hypervvssd.service
+Source102:  hypervvss.rules
 
 # HYPERV FCOPY DAEMON
 # hv_fcopy_daemon.c -> https://git.kernel.org/cgit/linux/kernel/git/next/linux-next.git/plain/tools/hv/hv_fcopy_daemon.c?id=next-20150402
 Source200:  hv_fcopy_daemon.c
 Source201:  hypervfcopyd.service
-
+Source202:  hypervfcopy.rules
 
 # HYPERV KVP DAEMON
 # Correct paths to external scripts ("/usr/libexec/hypervkvpd").
 Patch0:   hypervkvpd-0-corrected_paths_to_external_scripts.patch
 # rhbz#872566
 Patch1:   hypervkvpd-0-long_file_names_from_readdir.patch
+# rhbz#1347659
+Patch2:   hypervkvpd-0-cloexec_device_file.patch
 
 BuildRoot:        %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 # HyperV is available only on x86 architectures
@@ -68,6 +74,7 @@ is running on Windows Host with HyperV.
 Summary: HyperV key value pair (KVP) daemon
 Group:   System Environment/Daemons
 Requires: %{name}-license = %{version}-%{release}
+Requires: kernel >= 3.10.0-384.el7
 BuildRequires: systemd, kernel-headers
 Requires(post):   systemd
 Requires(preun):  systemd
@@ -85,6 +92,7 @@ IP injection functionality on the Guest.
 Summary: HyperV VSS daemon
 Group:   System Environment/Daemons
 Requires: %{name}-license = %{version}-%{release}
+Requires: kernel >= 3.10.0-384.el7
 BuildRequires: systemd, kernel-headers
 Requires(post):   systemd
 Requires(preun):  systemd
@@ -103,6 +111,7 @@ on the Linux Guest.
 Summary: HyperV FCOPY daemon
 Group:   System Environment/Daemons
 Requires: %{name}-license = %{version}-%{release}
+Requires: kernel >= 3.10.0-384.el7
 BuildRequires: systemd, kernel-headers
 Requires(post):   systemd
 Requires(preun):  systemd
@@ -143,6 +152,7 @@ cp -pvL %{SOURCE201} hypervfcopyd.service
 
 %patch0 -p1 -b .external_scripts
 %patch1 -p1 -b .long_names
+%patch2 -p1 -b .close_exec
 
 %build
 # HYPERV KVP DAEMON
@@ -183,22 +193,30 @@ mkdir -p %{buildroot}%{_sbindir}
 install -p -m 0755 %{hv_kvp_daemon} %{buildroot}%{_sbindir}
 install -p -m 0755 %{hv_vss_daemon} %{buildroot}%{_sbindir}
 install -p -m 0755 %{hv_fcopy_daemon} %{buildroot}%{_sbindir}
-mkdir -p %{buildroot}%{_unitdir}
 # Systemd unit file
+mkdir -p %{buildroot}%{_unitdir}
 install -p -m 0644 %{SOURCE5} %{buildroot}%{_unitdir}
 install -p -m 0644 %{SOURCE101} %{buildroot}%{_unitdir}
 install -p -m 0644 %{SOURCE201} %{buildroot}%{_unitdir}
+# Udev rules
+mkdir -p %{buildroot}%{_udevrulesdir}
+install -p -m 0644 %{SOURCE6} %{buildroot}%{_udevrulesdir}/%{udev_prefix}-hypervkvp.rules
+install -p -m 0644 %{SOURCE102} %{buildroot}%{_udevrulesdir}/%{udev_prefix}-hypervvss.rules
+install -p -m 0644 %{SOURCE202} %{buildroot}%{_udevrulesdir}/%{udev_prefix}-hypervfcopy.rules
 # Shell scripts for the KVP daemon
 mkdir -p %{buildroot}%{_libexecdir}/%{hv_kvp_daemon}
-install -p -m 0755 hv_get_dhcp_info.sh %{buildroot}%{_libexecdir}/%{hv_kvp_daemon}/hv_get_dhcp_info
-install -p -m 0755 hv_get_dns_info.sh %{buildroot}%{_libexecdir}/%{hv_kvp_daemon}/hv_get_dns_info
-install -p -m 0755 hv_set_ifconfig.sh %{buildroot}%{_libexecdir}/%{hv_kvp_daemon}/hv_set_ifconfig
+install -p -m 0755 %{SOURCE2} %{buildroot}%{_libexecdir}/%{hv_kvp_daemon}/hv_get_dhcp_info
+install -p -m 0755 %{SOURCE3} %{buildroot}%{_libexecdir}/%{hv_kvp_daemon}/hv_get_dns_info
+install -p -m 0755 %{SOURCE4} %{buildroot}%{_libexecdir}/%{hv_kvp_daemon}/hv_set_ifconfig
 # Directory for pool files
 mkdir -p %{buildroot}%{_sharedstatedir}/hyperv
 
 
 %post -n hypervkvpd
-%systemd_post hypervkvpd.service
+if [ $1 > 1 ] ; then
+	# Upgrade
+	systemctl --no-reload disable hypervkvpd.service >/dev/null 2>&1 || :
+fi
 
 %preun -n hypervkvpd
 %systemd_preun hypervkvpd.service
@@ -213,7 +231,10 @@ fi
 
 
 %post -n hypervvssd
-%systemd_post hypervvssd.service
+if [ $1 > 1 ] ; then
+	# Upgrade
+	systemctl --no-reload disable hypervvssd.service >/dev/null 2>&1 || :
+fi
 
 %postun -n hypervvssd
 %systemd_postun hypervvssd.service
@@ -223,7 +244,10 @@ fi
 
 
 %post -n hypervfcopyd
-%systemd_post hypervfcopyd.service
+if [ $1 > 1 ] ; then
+	# Upgrade
+	systemctl --no-reload disable hypervfcopyd.service >/dev/null 2>&1 || :
+fi
 
 %postun -n hypervfcopyd
 %systemd_postun hypervfcopyd.service
@@ -238,6 +262,7 @@ fi
 %files -n hypervkvpd
 %{_sbindir}/%{hv_kvp_daemon}
 %{_unitdir}/hypervkvpd.service
+%{_udevrulesdir}/%{udev_prefix}-hypervkvp.rules
 %dir %{_libexecdir}/%{hv_kvp_daemon}
 %{_libexecdir}/%{hv_kvp_daemon}/*
 %dir %{_sharedstatedir}/hyperv
@@ -245,15 +270,27 @@ fi
 %files -n hypervvssd
 %{_sbindir}/%{hv_vss_daemon}
 %{_unitdir}/hypervvssd.service
+%{_udevrulesdir}/%{udev_prefix}-hypervvss.rules
 
 %files -n hypervfcopyd
 %{_sbindir}/%{hv_fcopy_daemon}
 %{_unitdir}/hypervfcopyd.service
+%{_udevrulesdir}/%{udev_prefix}-hypervfcopy.rules
 
 %files license
 %doc COPYING
 
 %changelog
+* Tue Aug 16 2016 Vitaly Kuznetsov <vkuznets@redhat.com> - 0-0.29.20150216git
+- Switch units to udev-only activation (#1367240)
+
+* Wed Jun 22 2016 Vitaly Kuznetsov <vkuznets@redhat.com> - 0-0.28.20150216git
+- Close /dev/vmbus/hv_kvp fd on popen (#1347659)
+
+* Fri May 15 2015 Vitaly Kuznetsov <vkuznets@redhat.com> - 0-0.27.20150216git
+- 2016-02-16 git snapshot
+- Add udev rules to support host-side activation (#1304005)
+
 * Fri May 15 2015 Vitaly Kuznetsov <vkuznets@redhat.com> - 0-0.26.20150402git
 - 2015-04-02 git snapshot
 - VSS: skip all readonly-mounted filesystems (#1160584)
