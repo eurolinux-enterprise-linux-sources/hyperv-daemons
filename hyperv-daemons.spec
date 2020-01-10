@@ -5,7 +5,7 @@
 # HyperV FCOPY daemon binary name
 %global hv_fcopy_daemon hypervfcopyd
 # snapshot version
-%global snapver .20161211git
+%global snapver .20180415git
 # use hardened build
 %global _hardened_build 1
 # udev rules prefix
@@ -13,16 +13,14 @@
 
 Name:     hyperv-daemons
 Version:  0
-Release:  0.32%{?snapver}%{?dist}
+Release:  0.34%{?snapver}%{?dist}
 Summary:  HyperV daemons suite
 
 Group:    System Environment/Daemons
 License:  GPLv2
 URL:      http://www.kernel.org
 
-# Source files obtained from kernel upstream v4.9.
-# git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
-# The daemon and scripts are located in "master branch - /tools/hv"
+# Source files obtained from kernel upstream v4.17-rc1
 Source0:  COPYING
 
 # HYPERV KVP DAEMON
@@ -45,15 +43,9 @@ Source202:  hypervfcopy.rules
 
 # HYPERV TOOLS
 Source301:  lsvmbus
-Source302:  bondvf.sh
 
-# HYPERV KVP DAEMON
-# Correct paths to external scripts ("/usr/libexec/hypervkvpd").
-Patch0:   hypervkvpd-0-corrected_paths_to_external_scripts.patch
-# rhbz#872566
-Patch1:   hypervkvpd-0-long_file_names_from_readdir.patch
-# rhbz#1529745
-Patch2:  0001-hv-kvp-Avoid-reading-past-allocated-blocks-from-KVP-.patch
+# rhbz#1577692
+Patch1:  0001-Tools-hv-vss-fix-loop-device-detection.patch
 
 BuildRoot:        %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 # HyperV is available only on x86 architectures
@@ -94,6 +86,7 @@ BuildRequires: systemd, kernel-headers
 Requires(post):   systemd
 Requires(preun):  systemd
 Requires(postun): systemd
+Conflicts: selinux-policy < 3.13.1-197.el7
 
 %description -n hypervvssd
 Hypervvssd is an implementation of HyperV VSS functionality
@@ -154,9 +147,7 @@ cp -pvL %{SOURCE101} hypervvssd.service
 cp -pvL %{SOURCE200} hv_fcopy_daemon.c
 cp -pvL %{SOURCE201} hypervfcopyd.service
 
-%patch0 -p1 -b .external_scripts
-%patch1 -p1 -b .long_names
-%patch2 -p3 -b .kvp_past_allocated
+%patch1 -p3 -b .vss_fix_loop_detect
 
 %build
 # HYPERV KVP DAEMON
@@ -219,7 +210,6 @@ mkdir -p %{buildroot}%{_sharedstatedir}/hyperv
 install -p -m 0755 %{SOURCE301} %{buildroot}%{_sbindir}/
 
 mkdir -p %{buildroot}%{_datarootdir}/hyperv-tools/
-install -p -m 0755 %{SOURCE302} %{buildroot}%{_datarootdir}/hyperv-tools/
 
 %post -n hypervkvpd
 if [ $1 -gt 1 ] ; then
@@ -294,6 +284,13 @@ fi
 %{_datarootdir}/hyperv-tools
 
 %changelog
+* Mon Jun 18 2018 Vitaly Kuznetsov <vkuznets@redhat.com> - 0-0.34.20180415git
+- Skip freezing filesystems backed by loop upstream patches (#1577692)
+
+* Thu Apr 19 2018 2018 Vitaly Kuznetsov <vkuznets@redhat.com> - 0-0.33.20180415git
+- Update to upstream v4.17-rc1, drop no longer needed bondvf.sh script
+- Fix KVP with SR-IOV (#1567022)
+
 * Wed Jan 03 2018 Vitaly Kuznetsov <vkuznets@redhat.com> - 0-0.32.20161211git
 - Include 'Avoid reading past allocated blocks from KVP file' fix (#1529745)
 
