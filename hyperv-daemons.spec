@@ -5,7 +5,7 @@
 # HyperV FCOPY daemon binary name
 %global hv_fcopy_daemon hypervfcopyd
 # snapshot version
-%global snapver .20160216git
+%global snapver .20161211git
 # use hardened build
 %global _hardened_build 1
 # udev rules prefix
@@ -13,50 +13,45 @@
 
 Name:     hyperv-daemons
 Version:  0
-Release:  0.29%{?snapver}%{?dist}
+Release:  0.30%{?snapver}%{?dist}
 Summary:  HyperV daemons suite
 
 Group:    System Environment/Daemons
 License:  GPLv2
 URL:      http://www.kernel.org
 
-# Source files obtained from kernel upstream 2016-02-16.
-# git://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git
+# Source files obtained from kernel upstream v4.9.
+# git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
 # The daemon and scripts are located in "master branch - /tools/hv"
-# COPYING -> https://git.kernel.org/cgit/linux/kernel/git/next/linux-next.git/plain/COPYING?id=next-20150402
 Source0:  COPYING
 
 # HYPERV KVP DAEMON
-# hv_kvp_daemon.c -> https://git.kernel.org/cgit/linux/kernel/git/next/linux-next.git/tree/tools/hv/hv_kvp_daemon.c?id=next-20150402
 Source1:  hv_kvp_daemon.c
-# hv_get_dhcp_info.sh -> https://git.kernel.org/cgit/linux/kernel/git/next/linux-next.git/plain/tools/hv/hv_get_dhcp_info.sh?id=next-20150402
 Source2:  hv_get_dhcp_info.sh
-# hv_get_dns_info.sh -> https://git.kernel.org/cgit/linux/kernel/git/next/linux-next.git/plain/tools/hv/hv_get_dns_info.sh?id=next-20150402
 Source3:  hv_get_dns_info.sh
-# hv_set_ifconfig.sh -> https://git.kernel.org/cgit/linux/kernel/git/next/linux-next.git/plain/tools/hv/hv_set_ifconfig.sh?id=next-20150402
 Source4:  hv_set_ifconfig.sh
 Source5:  hypervkvpd.service
 Source6:  hypervkvp.rules
 
 # HYPERV VSS DAEMON
-# hv_vss_daemon.c -> https://git.kernel.org/cgit/linux/kernel/git/next/linux-next.git/plain/tools/hv/hv_vss_daemon.c?id=next-20150402
 Source100:  hv_vss_daemon.c
 Source101:  hypervvssd.service
 Source102:  hypervvss.rules
 
 # HYPERV FCOPY DAEMON
-# hv_fcopy_daemon.c -> https://git.kernel.org/cgit/linux/kernel/git/next/linux-next.git/plain/tools/hv/hv_fcopy_daemon.c?id=next-20150402
 Source200:  hv_fcopy_daemon.c
 Source201:  hypervfcopyd.service
 Source202:  hypervfcopy.rules
+
+# HYPERV TOOLS
+Source301:  lsvmbus
+Source302:  bondvf.sh
 
 # HYPERV KVP DAEMON
 # Correct paths to external scripts ("/usr/libexec/hypervkvpd").
 Patch0:   hypervkvpd-0-corrected_paths_to_external_scripts.patch
 # rhbz#872566
 Patch1:   hypervkvpd-0-long_file_names_from_readdir.patch
-# rhbz#1347659
-Patch2:   hypervkvpd-0-cloexec_device_file.patch
 
 BuildRoot:        %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 # HyperV is available only on x86 architectures
@@ -133,6 +128,13 @@ BuildArch:  noarch
 %description license
 Contains license of the HyperV daemons suite.
 
+%package -n hyperv-tools
+Summary:    Tools for Hyper-V guests
+Group:      Applications/System
+BuildArch:  noarch
+
+%description -n hyperv-tools
+Contains tools and scripts useful for Hyper-V guests.
 
 %prep
 %setup -Tc
@@ -152,7 +154,6 @@ cp -pvL %{SOURCE201} hypervfcopyd.service
 
 %patch0 -p1 -b .external_scripts
 %patch1 -p1 -b .long_names
-%patch2 -p1 -b .close_exec
 
 %build
 # HYPERV KVP DAEMON
@@ -211,9 +212,14 @@ install -p -m 0755 %{SOURCE4} %{buildroot}%{_libexecdir}/%{hv_kvp_daemon}/hv_set
 # Directory for pool files
 mkdir -p %{buildroot}%{_sharedstatedir}/hyperv
 
+# Tools
+install -p -m 0755 %{SOURCE301} %{buildroot}%{_sbindir}/
+
+mkdir -p %{buildroot}%{_datarootdir}/hyperv-tools/
+install -p -m 0755 %{SOURCE302} %{buildroot}%{_datarootdir}/hyperv-tools/
 
 %post -n hypervkvpd
-if [ $1 > 1 ] ; then
+if [ $1 -gt 1 ] ; then
 	# Upgrade
 	systemctl --no-reload disable hypervkvpd.service >/dev/null 2>&1 || :
 fi
@@ -231,7 +237,7 @@ fi
 
 
 %post -n hypervvssd
-if [ $1 > 1 ] ; then
+if [ $1 -gt 1 ] ; then
 	# Upgrade
 	systemctl --no-reload disable hypervvssd.service >/dev/null 2>&1 || :
 fi
@@ -244,7 +250,7 @@ fi
 
 
 %post -n hypervfcopyd
-if [ $1 > 1 ] ; then
+if [ $1 -gt 1 ] ; then
 	# Upgrade
 	systemctl --no-reload disable hypervfcopyd.service >/dev/null 2>&1 || :
 fi
@@ -280,7 +286,16 @@ fi
 %files license
 %doc COPYING
 
+%files -n hyperv-tools
+%{_sbindir}/lsvmbus
+%{_datarootdir}/hyperv-tools
+
 %changelog
+* Thu Jan 19 2017 Vitaly Kuznetsov <vkuznets@redhat.com> - 0-0.30.20161211git
+- Use '-gt' instead of '>' to do the right comparison (#1414822)
+- hyperv-tools subpackage added (#1378710)
+- Update to upstream v4.9 (#1406397)
+
 * Tue Aug 16 2016 Vitaly Kuznetsov <vkuznets@redhat.com> - 0-0.29.20150216git
 - Switch units to udev-only activation (#1367240)
 
