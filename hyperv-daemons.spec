@@ -13,7 +13,7 @@
 
 Name:     hyperv-daemons
 Version:  0
-Release:  0.30%{?snapver}%{?dist}
+Release:  0.32%{?snapver}%{?dist}
 Summary:  HyperV daemons suite
 
 Group:    System Environment/Daemons
@@ -52,6 +52,8 @@ Source302:  bondvf.sh
 Patch0:   hypervkvpd-0-corrected_paths_to_external_scripts.patch
 # rhbz#872566
 Patch1:   hypervkvpd-0-long_file_names_from_readdir.patch
+# rhbz#1529745
+Patch2:  0001-hv-kvp-Avoid-reading-past-allocated-blocks-from-KVP-.patch
 
 BuildRoot:        %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 # HyperV is available only on x86 architectures
@@ -154,6 +156,7 @@ cp -pvL %{SOURCE201} hypervfcopyd.service
 
 %patch0 -p1 -b .external_scripts
 %patch1 -p1 -b .long_names
+%patch2 -p3 -b .kvp_past_allocated
 
 %build
 # HYPERV KVP DAEMON
@@ -291,6 +294,12 @@ fi
 %{_datarootdir}/hyperv-tools
 
 %changelog
+* Wed Jan 03 2018 Vitaly Kuznetsov <vkuznets@redhat.com> - 0-0.32.20161211git
+- Include 'Avoid reading past allocated blocks from KVP file' fix (#1529745)
+
+* Mon Dec 11 2017 Eduardo Otubo <otubo@redhat.com> - 0-0.31.20161211git
+- Start KVP daemon after network is setup (#1377550)
+
 * Thu Jan 19 2017 Vitaly Kuznetsov <vkuznets@redhat.com> - 0-0.30.20161211git
 - Use '-gt' instead of '>' to do the right comparison (#1414822)
 - hyperv-tools subpackage added (#1378710)
